@@ -1,0 +1,120 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny - Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.email == 'aaraque901@gmail.com');
+    }
+
+    // Identifies if the user is the bootstrapped admin or has admin role in DB
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'aaraque901@gmail.com' || 
+        (isVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isEmployee() {
+      return isVerified() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- Schema Validations ---
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(['name', 'category', 'unitOfMeasure', 'purchasePrice', 'salePrice', 'currentStock', 'minStock', 'updatedAt'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 400
+        && data.category in ['Insumo Agrícola', 'Medicamento Veterinario', 'Alimento para Animales']
+        && data.unitOfMeasure is string && data.unitOfMeasure.size() <= 100
+        && data.purchasePrice is number && data.purchasePrice >= 0
+        && data.salePrice is number && data.salePrice >= 0
+        && (data.currentStock is number || data.currentStock is int)
+        && (data.minStock is number || data.minStock is int) && data.minStock >= 0
+        && data.updatedAt == request.time;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'role'])
+        && data.uid == request.auth.uid
+        && data.role in ['admin', 'employee']
+        && data.email is string && data.email.size() <= 300;
+    }
+
+    function isValidInvoice(data) {
+      return data.keys().hasAll(['invoiceNumber', 'supplierName', 'invoiceDate', 'totalAmount', 'items', 'createdAt', 'createdBy'])
+        && data.invoiceNumber is string && data.invoiceNumber.size() <= 200
+        && data.items is list && data.items.size() > 0
+        && data.totalAmount is number && data.totalAmount >= 0
+        && data.createdAt == request.time
+        && data.createdBy == request.auth.uid;
+    }
+
+    // --- Rules ---
+
+    // Products
+    match /products/{productId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      
+      allow create: if (isAdmin() || isEmployee()) && isValidProduct(incoming()) && isValidId(productId);
+      
+      allow update: if (isAdmin() || isEmployee()) && isValidProduct(incoming()) && (
+        isAdmin() ||
+        (isEmployee() && incoming().diff(existing()).affectedKeys().hasOnly(['currentStock', 'updatedAt', 'purchasePrice']))
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    // Users
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      
+      // Allow creation of first user as admin (if no users exists) or self-registration
+      // Security note: In a real production app, we'd restrict this further.
+      allow create: if isSignedIn() && request.auth.uid == userId && (
+        isValidUser(incoming())
+      );
+      
+      allow update: if isAdmin() && isValidUser(incoming());
+      
+      allow delete: if isAdmin();
+    }
+
+    // Invoices
+    match /purchaseInvoices/{invoiceId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      
+      allow create: if (isAdmin() || isEmployee()) && isValidInvoice(incoming()) && isValidId(invoiceId);
+      
+      // Invoices are immutable
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user with role-based access.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Full name of the user" },
+        "email": { "type": "string", "format": "email", "description": "User email address" },
+        "role": { "type": "string", "enum": ["admin", "employee"], "description": "Access role" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "An item in the inventory.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Product name" },
+        "category": { "type": "string", "enum": ["Insumo Agrícola", "Medicamento Veterinario", "Alimento para Animales"], "description": "Category" },
+        "unitOfMeasure": { "type": "string", "description": "Unit of measure (e.g., kg, unit)" },
+        "purchasePrice": { "type": "number", "description": "Last purchase price" },
+        "salePrice": { "type": "number", "description": "Current selling price" },
+        "currentStock": { "type": "number", "description": "Actual units in warehouse" },
+        "minStock": { "type": "number", "description": "Stock threshold for alerts" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
+      },
+      "required": ["name", "category", "unitOfMeasure", "purchasePrice", "salePrice", "currentStock", "minStock", "updatedAt"]
+    },
+    "PurchaseInvoice": {
+      "title": "Purchase Invoice",
+      "description": "Record of stock purchase from suppliers.",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": { "type": "string", "description": "Supplier's invoice number" },
+        "supplierName": { "type": "string", "description": "Name of the supplier" },
+        "invoiceDate": { "type": "string", "format": "date", "description": "Date of the invoice" },
+        "totalAmount": { "type": "number", "description": "Total cost of the invoice" },
+        "items": {
+          "type": "array",
+          "description": "List of products bought"
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "createdBy": { "type": "string", "description": "UID of the user who registered it" }
+      },
+      "required": ["invoiceNumber", "supplierName", "invoiceDate", "totalAmount", "items", "createdAt", "createdBy"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "Collection of system users"
+    },
+    "products": {
+      "schema": "Product",
+      "description": "Inventory products"
+    },
+    "purchaseInvoices": {
+      "schema": "PurchaseInvoice",
+      "description": "History of purchase invoices"
+    }
+  }
+}
